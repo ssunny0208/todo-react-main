@@ -12,7 +12,11 @@ body {
 }
 
 h1 {
-  @apply text-center;
+  @apply text-center text-4xl font-bold my-5;
+}
+
+.centerContainer {
+  @apply flex flex-col items-center justify-center;
 }
 
 ul {
@@ -20,5 +24,5 @@ ul {
 }
 
 li {
-  @apply flex items-center;
+  @apply flex items-center justify-center;
 }
