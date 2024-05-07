@@ -1,34 +1,139 @@
-/*
-  각각의 할 일 항목을 렌더링하는 컴포넌트입니다.
-  각 할 일의 완료 상태에 따라 체크박스와 텍스트 스타일을 동기화하며,
-  삭제 버튼을 통해 해당 할 일을 삭제할 수 있습니다.
-  이 컴포넌트는 `TodoList.js`에서 사용되어 할 일 목록을 구성합니다.
-*/
-import React from "react";
+// TodoList.js
+
+"use client";
+import React, { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
+import TodoItem from "@/components/TodoItem";
 import styles from "@/styles/TodoList.module.css";
+import { db } from "@/firebase";
+import {
+  collection,
+  query,
+  doc,
+  getDocs,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  orderBy,
+  where,
+} from "firebase/firestore";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 
-// TodoItem 컴포넌트를 정의합니다.
-const TodoItem = ({ todo, onToggle, onDelete }) => {
-  // 각 할 일 항목을 렌더링합니다.
+const todoCollection = collection(db, "todos");
+
+const TodoList = () => {
+  const [todos, setTodos] = useState([]);
+  const [input, setInput] = useState("");
+  const [dueDate, setDueDate] = useState(new Date()); // Due Date를 추가합니다.
+
+  const router = useRouter();
+  const { data } = useSession({
+    required: true,
+    onUnauthenticated() {
+      router.replace("/login");
+    },
+  });
+
+  useEffect(() => {
+    getTodos();
+  }, [data]);
+
+  const getTodos = async () => {
+    if (!data?.user?.name) return;
+    const q = query(todoCollection, where("userName", "==", data?.user?.name));
+    const results = await getDocs(q);
+    const newTodos = [];
+    results.docs.forEach((doc) => {
+      newTodos.push({ id: doc.id, ...doc.data() });
+    });
+
+    setTodos(newTodos);
+  };
+
+  const addTodo = async () => {
+    if (input.trim() === "") return;
+    const docRef = await addDoc(todoCollection, {
+      userName: data?.user?.name,
+      text: input,
+      completed: false,
+      dueDate: dueDate.getTime(), // 추가된 Due Date 값을 저장합니다.
+    });
+    setTodos([
+      ...todos,
+      { id: docRef.id, text: input, completed: false, dueDate: dueDate },
+    ]);
+    setInput("");
+    setDueDate(new Date()); // Todo를 추가한 후에 Due Date를 초기화합니다.
+  };
+
+  const toggleTodo = (id) => {
+    setTodos(
+      todos.map((todo) => {
+        if (todo.id === id) {
+          const todoDoc = doc(todoCollection, id);
+          updateDoc(todoDoc, { completed: !todo.completed });
+          return { ...todo, completed: !todo.completed };
+        } else {
+          return todo;
+        }
+      })
+    );
+  };
+
+  const deleteTodo = (id) => {
+    const todoDoc = doc(todoCollection, id);
+    deleteDoc(todoDoc);
+    setTodos(
+      todos.filter((todo) => {
+        return todo.id !== id;
+      })
+    );
+  };
+
   return (
-    <li className={styles.todoItem}>
-      {/* 체크박스를 렌더링하고, 체크박스의 상태를 할 일의 완료 상태와 동기화합니다.
-          체크박스의 상태가 변경되면 onToggle 함수를 호출하여 완료 상태를 업데이트합니다. */}
-      <input type="checkbox" checked={todo.completed} onChange={onToggle} />
+    <div className={styles.container}>
+      <h1 className="text-xl mb-4 font-bold underline underline-offset-4 decoration-wavy">
+        {data?.user?.name}'s Todo List
+      </h1>
 
-      {/* 할 일의 텍스트를 렌더링하고, 완료 상태에 따라 텍스트에 취소선을 적용합니다. */}
-      <span
-        className={styles.todoText}
-        style={{ textDecoration: todo.completed ? "line-through" : "none" }}
+      <input
+        type="text"
+        className="w-full p-1 mb-4 border border-gray-300 rounded"
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        placeholder="Enter your todo"
+      />
+
+      {/* Due Date를 입력받는 Datepicker를 추가합니다. */}
+      <DatePicker
+        selected={dueDate}
+        onChange={(date) => setDueDate(date)}
+        className="w-full p-1 mb-4 border border-gray-300 rounded"
+        dateFormat="MM/dd/yyyy"
+      />
+
+      <button
+        className="w-40 justify-self-end p-1 mb-4 bg-blue-500 text-white
+                   border border-blue-500 rounded hover:bg-white hover:text-blue-500"
+        onClick={addTodo}
       >
-        {todo.text}
-      </span>
+        Add Todo
+      </button>
 
-      {/* 삭제 버튼을 렌더링하고, 클릭 시 onDelete 함수를 호출하여 해당 할 일을 삭제합니다. */}
-      <button onClick={onDelete}>Delete</button>
-    </li>
+      <ul>
+        {todos.map((todo) => (
+          <TodoItem
+            key={todo.id}
+            todo={todo}
+            onToggle={() => toggleTodo(todo.id)}
+            onDelete={() => deleteTodo(todo.id)}
+          />
+        ))}
+      </ul>
+    </div>
   );
 };
 
-// TodoItem 컴포넌트를 내보냅니다.
-export default TodoItem;
+export default TodoList;
